@@ -1,24 +1,3 @@
-"""
-Calligraphy Robot — Raspberry Pi 5
-====================================
-Requirements:
-    pip install numpy pyserial
-
-Hardware connection:
-    Pi5 GPIO14 (TX) → STM32 PA10 (RX)   via 3.3V–3.3V direct
-    Pi5 GPIO15 (RX) → STM32 PA9  (TX)   via 3.3V–3.3V direct
-    Pi5 GND         → STM32 GND
-
-Serial port on Pi5:  /dev/ttyAMA0   (UART0, hardware UART)
-Baud rate:           115200
-
-Flow:
-  1. User types text → TRAIN MODEL (once) → GENERATE G-CODE
-  2. GUI shows G-code preview
-  3. User presses SEND TO STM32
-  4. G-code is streamed line-by-line over UART, waits for 'ok' each line
-  5. STM32 executes motion + servo commands
-"""
 
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
@@ -39,9 +18,9 @@ except ImportError:
     SERIAL_AVAILABLE = False
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+
 #  PALETTE & FONTS
-# ══════════════════════════════════════════════════════════════════════════════
+
 BG         = "#0d0d0f"
 SURFACE    = "#16161a"
 SURFACE2   = "#1e1e24"
@@ -66,17 +45,17 @@ DEFAULT_PORT = "/dev/ttyAMA0"   # hardware UART on Raspberry Pi 5
 DEFAULT_BAUD = 115200
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+
 #  CHARACTER SET
-# ══════════════════════════════════════════════════════════════════════════════
+
 CHARSET  = " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!?"
 CHAR2IDX = {c: i for i, c in enumerate(CHARSET)}
 VOCAB    = len(CHARSET)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+
 #  ACTIVATIONS
-# ══════════════════════════════════════════════════════════════════════════════
+
 def sigmoid(x):
     return 1.0 / (1.0 + np.exp(-np.clip(x, -500, 500)))
 
@@ -87,9 +66,9 @@ def tanh_grad(t):
     return 1.0 - t ** 2
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+
 #  SYNTHETIC STROKE GENERATOR  (training targets)
-# ══════════════════════════════════════════════════════════════════════════════
+
 def _char_strokes(ch: str):
     lo = ch.lower()
     s  = []
@@ -174,9 +153,9 @@ def make_dataset(n_samples: int = 1000, stroke_len: int = 64):
             np.array(Y, dtype=np.float32))
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+
 #  PURE NUMPY 2-LAYER LSTM
-# ══════════════════════════════════════════════════════════════════════════════
+
 class NumpyLSTM:
     def __init__(self, vocab=VOCAB, embed_dim=48,
                  hidden=128, out_dim=3, lr=0.001):
@@ -316,9 +295,9 @@ class NumpyLSTM:
         return m
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+
 #  TRAINING
-# ══════════════════════════════════════════════════════════════════════════════
+
 def train_model(log_cb, progress_cb, done_cb,
                 epochs=80, n_samples=1000, stroke_len=48, batch=32):
     try:
@@ -362,9 +341,9 @@ def train_model(log_cb, progress_cb, done_cb,
         done_cb(success=False, error=str(e))
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+
 #  LETTER STROKE TEMPLATES
-# ══════════════════════════════════════════════════════════════════════════════
+
 LETTER_WIDTH  = 10.0
 LETTER_HEIGHT = 20.0
 CHAR_SPACING  = 14.0
@@ -418,9 +397,9 @@ def _letter_segments(ch: str):
     else:           return [[(1,0),(1,20),(9,20),(9,0),(1,0)]]
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+
 #  RNN STYLE JITTER
-# ══════════════════════════════════════════════════════════════════════════════
+
 def _get_rnn_style(ch: str, model: NumpyLSTM, h1, c1, h2, c2):
     idx = CHAR2IDX.get(ch, 0)
     e   = model.emb[idx]
@@ -431,9 +410,9 @@ def _get_rnn_style(ch: str, model: NumpyLSTM, h1, c1, h2, c2):
     return jitter, h1, c1, h2, c2
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+
 #  G-CODE BUILDER
-# ══════════════════════════════════════════════════════════════════════════════
+
 def build_gcode(text: str, model: NumpyLSTM,
                 progress_cb=None,
                 pen_down_angle=90, pen_up_angle=0):
@@ -505,17 +484,12 @@ def run_inference(text: str, model: NumpyLSTM,
     return build_gcode(text, model, progress_cb=progress_cb)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+
 #  SERIAL SENDER  —  streams G-code to STM32 line by line
-# ══════════════════════════════════════════════════════════════════════════════
+
 def serial_send(gcode_lines: list, port: str, baud: int,
                 log_cb, progress_cb, done_cb):
-    """
-    Sends G-code to STM32 over UART.
-    Waits for 'ok' acknowledgement after each command line.
-    Runs in a background thread.
-    """
-    # Filter out empty lines and comment-only lines for sending
+    
     commands = []
     for line in gcode_lines:
         cmd = line.split(";")[0].strip()   # strip inline comments
@@ -533,7 +507,7 @@ def serial_send(gcode_lines: list, port: str, baud: int,
             log_cb("Connected — sending G-code...")
 
             for i, cmd in enumerate(commands):
-                # Send command with newline terminator
+                # Sending command with newline terminator
                 ser.write((cmd + "\n").encode("ascii"))
 
                 # Wait for 'ok' response from STM32
@@ -542,7 +516,7 @@ def serial_send(gcode_lines: list, port: str, baud: int,
                 log_cb(f"[{i+1:3d}/{total}]  {cmd:<28}  ← {response}")
                 progress_cb(int((i+1) / total * 100))
 
-                # If STM32 sends 'error', stop immediately
+                # If STM32 sends 'error', stopping immediately
                 if response.lower().startswith("error"):
                     done_cb(success=False, error=f"STM32 error on: {cmd}")
                     return
@@ -561,9 +535,9 @@ def serial_send(gcode_lines: list, port: str, baud: int,
         done_cb(success=False, error=str(e))
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+
 #  GUI
-# ══════════════════════════════════════════════════════════════════════════════
+
 class CalligraphyApp(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -581,7 +555,7 @@ class CalligraphyApp(tk.Tk):
         self._check_model_on_start()
         self._refresh_ports()
 
-    # ── Startup ───────────────────────────────────────────────────────────────
+    # Startup 
     def _check_model_on_start(self):
         if os.path.exists(MODEL_PATH):
             try:
@@ -609,9 +583,9 @@ class CalligraphyApp(tk.Tk):
         self._port_cb["values"] = ports
         self._port_var.set(DEFAULT_PORT)
 
-    # ══════════════════════════════════════════════════════════════════════════
+    
     #  BUILD UI
-    # ══════════════════════════════════════════════════════════════════════════
+    
     def _build_ui(self):
         self.columnconfigure(0, weight=1)
         self.rowconfigure(3, weight=1)
@@ -747,7 +721,7 @@ class CalligraphyApp(tk.Tk):
         tk.Label(outer, textvariable=self._infer_pct,
                  font=FONT_MONO, bg=BG, fg=SUCCESS, width=5).grid(row=0, column=5)
 
-        # Send progress
+        # Sending progress
         tk.Label(outer, text="SEND", font=FONT_MONO,
                  bg=BG, fg=TEXT_DIM).grid(row=0, column=6, padx=(16,6))
         self._send_prog = ttk.Progressbar(outer, length=160,
@@ -812,9 +786,7 @@ class CalligraphyApp(tk.Tk):
             anchor="w", padx=12, pady=5)
         self._status_lbl.pack(fill="x")
 
-    # ══════════════════════════════════════════════════════════════════════════
-    #  HELPERS
-    # ══════════════════════════════════════════════════════════════════════════
+   
     def _btn(self, parent, text, bg, fg, cmd, state="normal"):
         return tk.Button(
             parent, text=text, font=FONT_BTN,
@@ -863,11 +835,11 @@ class CalligraphyApp(tk.Tk):
         self._clear_btn.config(state="normal")
         self._copy_btn.config(state="normal" if gcode_ready else "disabled")
 
-    # ══════════════════════════════════════════════════════════════════════════
+   
     #  ACTIONS
-    # ══════════════════════════════════════════════════════════════════════════
+  
 
-    # ── TRAIN ─────────────────────────────────────────────────────────────────
+    #  TRAINNING
     def _on_train(self):
         if self._running: return
         self._lock()
@@ -903,7 +875,7 @@ class CalligraphyApp(tk.Tk):
             self._set_status(f"Training failed: {error}", ERROR)
             self._unlock(model_ready=False)
 
-    # ── GENERATE ──────────────────────────────────────────────────────────────
+    #  GENERATING
     def _on_generate(self):
         text = self._text_entry.get().strip()
         if not text:
@@ -940,7 +912,7 @@ class CalligraphyApp(tk.Tk):
         self._set_status(f"G-Code ready — {n} lines. Press SEND TO STM32 to execute.", SUCCESS)
         self._unlock(model_ready=True, gcode_ready=True)
 
-    # ── SEND TO STM32 ─────────────────────────────────────────────────────────
+    # SENDING TO STM32 
     def _on_send(self):
         if not self._gcode:
             messagebox.showwarning("No G-Code", "Generate G-code first.")
@@ -989,7 +961,7 @@ class CalligraphyApp(tk.Tk):
             self._append_log(f"ERROR: {error}", "error")
         self._unlock(model_ready=True, gcode_ready=True)
 
-    # ── COPY / CLEAR ──────────────────────────────────────────────────────────
+    #  COPY / CLEAR 
     def _on_copy(self):
         if not self._gcode: return
         self.clipboard_clear()
@@ -1010,7 +982,7 @@ class CalligraphyApp(tk.Tk):
         self._text_entry.focus()
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+
 if __name__ == "__main__":
     app = CalligraphyApp()
     app.mainloop()
