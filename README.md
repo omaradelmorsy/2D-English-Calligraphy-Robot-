@@ -30,5 +30,5 @@ The trained model saves automatically to calligraphy_model.pkl in the same folde
 The files assembly.SLDASM, Base.SLDPRT, Part1–7.SLDPRT, left_bar.SLDPRT, middle_bar.SLDPRT, right_bar.SLDPRT, pen.SLDPRT, pen_Shaft.SLDPRT, and A4 Paper.SLDPRT are the full SolidWorks 3D model of the XY plotter.
 Keep all these files in the same folder. Open assembly.SLDASM in SolidWorks and it will automatically load all the part files. Physical construction continues in the summer.
 
-STM32 Firmware — Do Not Run Yet
+STM32 Firmware : Do Not Run Yet
 The files main.c, main.h, gcode.c, gcode.h, motion.c, motion.h, stepper.c, stepper.h, servo.c, and servo.h are the STM32L476 firmware. The code is written and compiles in STM32CubeIDE but has not been tested on physical hardware yet. Do not attempt to run these until the mechanical assembly is complete.
